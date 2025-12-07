@@ -4342,7 +4342,16 @@
                         content = '\\begin{gathered}' + content + '\\end{gathered}';
                     }
 
-                    return delimiter + content + closing;
+                    const result = delimiter + content + closing;
+
+                    // Apply alignment wrappers
+                    if (m1 === '$$') {
+                        return '<div class="math-center">' + result + '</div>';
+                    } else if (m4 === '\\[' || m4 === '\\[') {
+                        return '<div class="math-left">' + result + '</div>';
+                    }
+
+                    return result;
                 });
 
                 // After processing math blocks, handle remaining @ in plain text as <br>
