@@ -909,6 +909,67 @@
             outline-offset: 2px;
         }
 
+        /* Rich Text Editor Styles */
+        .custom-formula-editor-container {
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            background-color: var(--background-color);
+            overflow: hidden;
+            text-align: left;
+            margin-bottom: 1rem;
+            width: 100%;
+        }
+
+        .custom-formula-editor-toolbar {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background-color: rgba(0,0,0,0.03);
+            border-bottom: 1px solid var(--border-color);
+            flex-wrap: wrap;
+        }
+
+        .custom-formula-editor-btn {
+            background: none;
+            border: 1px solid transparent;
+            cursor: pointer;
+            padding: 0.2rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.9rem;
+            color: var(--text-color);
+        }
+
+        .custom-formula-editor-btn:hover {
+            background-color: rgba(0,0,0,0.05);
+            border-color: var(--border-color);
+        }
+
+        .custom-formula-editor-content {
+            padding: 0.75rem;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+            outline: none;
+            resize: vertical; /* Allow resizing */
+        }
+
+        .custom-formula-editor-content ul {
+            padding-left: 1.5rem;
+            margin: 0.5rem 0;
+        }
+
+        .custom-formula-editor-content[placeholder]:empty:before {
+            content: attr(placeholder);
+            color: #888;
+            font-style: italic;
+        }
+
+        /* Fix bullet alignment in rendered text */
+        .custom-formula-formula-text ul {
+            padding-left: 1.2rem; /* Adjusted for better left alignment */
+            margin: 0.2rem 0;
+        }
+
         /* Print Styles */
         @media print {
             body.custom-formula-printing > *:not(.custom-formula-export-container) {
@@ -1061,8 +1122,16 @@
             </div>
             <div class="custom-formula-form-group">
                 <label for="custom-formula-manual-formula-input">Enter your goals:</label>
-                <textarea id="custom-formula-manual-formula-input" placeholder="e.g., f(x) = x^2" rows="3"></textarea>
-                <p><small>Tip: Separate multiple goals with an emoji (e.g., 🚀, ✨, 💡)</small></p>
+                <div id="custom-formula-manual-editor-wrapper" class="custom-formula-editor-container">
+                    <div class="custom-formula-editor-toolbar">
+                        <button class="custom-formula-editor-btn" data-cmd="bold" title="Bold"><b>B</b></button>
+                        <button class="custom-formula-editor-btn" data-cmd="italic" title="Italic"><i>I</i></button>
+                        <button class="custom-formula-editor-btn" data-cmd="underline" title="Underline"><u>U</u></button>
+                        <button class="custom-formula-editor-btn" data-cmd="insertUnorderedList" title="Bullet List">• List</button>
+                    </div>
+                    <div id="custom-formula-manual-formula-input" class="custom-formula-editor-content" contenteditable="true" placeholder="e.g., f(x) = x^2"></div>
+                </div>
+                <p><small>Tip: Separate multiple goals with <b>/newgoal</b> or an emoji (e.g., 🚀)</small></p>
             </div>
             <button id="custom-formula-add-formula-btn" class="custom-formula-btn">Add Goals</button>
         </div>
@@ -1224,7 +1293,15 @@
             </div>
             <div class="custom-formula-form-group">
                 <label for="custom-formula-subgoal-input">Subgoal</label>
-                <input type="text" id="custom-formula-subgoal-input" placeholder="e.g., Review chapter 1 notes">
+                <div id="custom-formula-subgoal-editor-wrapper" class="custom-formula-editor-container">
+                    <div class="custom-formula-editor-toolbar">
+                        <button class="custom-formula-editor-btn" data-cmd="bold" title="Bold"><b>B</b></button>
+                        <button class="custom-formula-editor-btn" data-cmd="italic" title="Italic"><i>I</i></button>
+                        <button class="custom-formula-editor-btn" data-cmd="underline" title="Underline"><u>U</u></button>
+                        <button class="custom-formula-editor-btn" data-cmd="insertUnorderedList" title="Bullet List">• List</button>
+                    </div>
+                    <div id="custom-formula-subgoal-input" class="custom-formula-editor-content" contenteditable="true" placeholder="e.g., Review chapter 1 notes"></div>
+                </div>
             </div>
             <div class="custom-formula-modal-actions">
                 <button id="custom-formula-save-subgoal-btn" class="custom-formula-btn">Save</button>
@@ -3597,6 +3674,14 @@
 
             // --- Export Logic ---
 
+            function stripHtml(html) {
+               let tmp = document.createElement("DIV");
+               tmp.innerHTML = html;
+               // Replace block elements with newlines for better text formatting
+               // Simple approach: Use innerText which generally handles whitespace better than textContent
+               return tmp.innerText || "";
+            }
+
             exportTextBtn.addEventListener('click', async () => {
                 exportModal.classList.remove('custom-formula-show');
                 const { category, subcategory } = exportContext;
@@ -3610,10 +3695,10 @@
 
                 let shareText = `please explain this session from ${subcategory}\n\n`;
                 items.forEach(item => {
-                    shareText += `${item.text}\n`;
+                    shareText += `${stripHtml(item.text)}\n`;
                     if (item.subgoals && item.subgoals.length > 0) {
                         item.subgoals.forEach(sub => {
-                            shareText += ` - ${sub.text}\n`;
+                            shareText += ` - ${stripHtml(sub.text)}\n`;
                         });
                     }
                     shareText += '\n';
@@ -3960,20 +4045,40 @@
             });
 
             addFormulaBtn.addEventListener('click', () => {
-                const inputText = manualFormulaInput.value.trim();
-                if (!inputText) {
-                    showNotification('Input Required', 'Please enter one or more goals separated by an emoji.');
+                const editor = document.getElementById('custom-formula-manual-formula-input');
+                const htmlContent = editor.innerHTML.trim();
+
+                if (!htmlContent) {
+                    showNotification('Input Required', 'Please enter one or more goals.');
                     return;
                 }
 
-                const goalStrings = inputText.split(/\p{Emoji_Presentation}/u).map(s => s.trim()).filter(s => s.length > 0);
+                // Split by /newgoal (case insensitive) first
+                const rawChunks = htmlContent.split(/\/newgoal/i);
+                let finalGoals = [];
 
-                if (goalStrings.length === 0) {
+                rawChunks.forEach(chunk => {
+                    // Then fallback to emoji split
+                    const subParts = chunk.split(/\p{Emoji_Presentation}/u);
+                    subParts.forEach(s => {
+                        const trimmed = s.trim();
+                        // Check if it has actual content (strip HTML tags to check)
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = trimmed;
+                        const hasContent = tempDiv.textContent.trim().length > 0 || tempDiv.querySelectorAll('img, table, hr').length > 0;
+
+                        if (hasContent) {
+                            finalGoals.push(trimmed);
+                        }
+                    });
+                });
+
+                if (finalGoals.length === 0) {
                     showNotification('Input Required', 'Please enter one or more valid goals.');
                     return;
                 }
 
-                const newFormulas = goalStrings.map(text => createGoal(text));
+                const newFormulas = finalGoals.map(text => createGoal(text));
 
                 if (sessionCategory && sessionSubcategory) {
                     // Session active: add directly, filtering for duplicates
@@ -3988,10 +4093,9 @@
                     formulas.push(...uniqueNewFormulas);
                     saveFormulasToLocalStorage();
                     renderFormulas();
-                    manualFormulaInput.value = ''; // Clear input on success
+                    editor.innerHTML = ''; // Clear input on success
                 } else {
                     // No session: use the save modal flow
-                    // This assumes the main `formulas` array is empty, which it should be if no session is active.
                     parsedFormulas = newFormulas;
                     saveModal.classList.add('custom-formula-show');
                 }
@@ -4149,14 +4253,22 @@
 
             function openSubgoalModal(goalId) {
                 currentGoalId = goalId;
-                subgoalInput.value = '';
+                const editor = document.getElementById('custom-formula-subgoal-input');
+                editor.innerHTML = '';
                 addSubgoalModal.classList.add('custom-formula-show');
-                subgoalInput.focus();
+                editor.focus();
             }
 
             saveSubgoalBtn.addEventListener('click', () => {
-                const subgoalText = subgoalInput.value.trim();
-                if (!subgoalText) {
+                const editor = document.getElementById('custom-formula-subgoal-input');
+                const subgoalText = editor.innerHTML.trim();
+
+                // Content check
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = subgoalText;
+                const hasContent = tempDiv.textContent.trim().length > 0;
+
+                if (!hasContent) {
                     showNotification('Input Required', 'Please enter a subgoal.');
                     return;
                 }
@@ -4170,13 +4282,13 @@
                 }
 
                 addSubgoalModal.classList.remove('custom-formula-show');
-                subgoalInput.value = '';
+                editor.innerHTML = '';
                 currentGoalId = null;
             });
 
             cancelSubgoalBtn.addEventListener('click', () => {
                 addSubgoalModal.classList.remove('custom-formula-show');
-                subgoalInput.value = '';
+                document.getElementById('custom-formula-subgoal-input').innerHTML = '';
                 currentGoalId = null;
             });
 
@@ -4187,93 +4299,39 @@
             }
 
             function renderTextWithMath(parentElement, text) {
-                // Securely renders text and MathJax formulas by creating DOM nodes
-                parentElement.textContent = ''; // Clear previous content
+                // Securely renders text (HTML) and MathJax formulas
+                parentElement.innerHTML = ''; // Clear previous content
 
-                const processedText = formatGoalTextForDisplay(text);
-                const regex = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\])/g;
-                const parts = processedText.split(regex);
+                // Check for HTML content (basic heuristic) to handle legacy plain text
+                const hasHtml = /<[a-z][\s\S]*>/i.test(text) || text.includes('&lt;') || text.includes('&gt;') || text.includes('&amp;');
 
-                const fragment = document.createDocumentFragment();
-
-                for (const part of parts) {
-                    if (!part) continue;
-
-                    if (part.startsWith('$$') && part.endsWith('$$')) {
-                        const div = document.createElement('div');
-                        div.className = 'math-center';
-                        let content = part.slice(2, -2);
-
-                        // Always replace @ with LaTeX newline
-                        content = content.replace(/@/g, '\\\\');
-
-                        // Only handle explicit newlines and wrapping if not in a complex environment
-                        if (!content.includes('\\begin')) {
-                            content = content.replace(/\r?\n/g, '\\\\');
-
-                            // Wrap in gathered if we have line breaks to ensure they render
-                            if (content.includes('\\\\')) {
-                                content = '\\begin{gathered}' + content + '\\end{gathered}';
-                            }
-                        }
-
-                        div.textContent = '$$' + content + '$$';
-                        fragment.appendChild(div);
-                    } else if (part.startsWith('\\[') && part.endsWith('\\]')) {
-                        const div = document.createElement('div');
-                        div.className = 'math-left';
-                        let content = part.slice(2, -2);
-
-                        content = content.replace(/@/g, '\\\\');
-
-                        if (!content.includes('\\begin')) {
-                            content = content.replace(/\r?\n/g, '\\\\');
-                            if (content.includes('\\\\')) {
-                                content = '\\begin{gathered}' + content + '\\end{gathered}';
-                            }
-                        }
-
-                        div.textContent = '\\[' + content + '\\]';
-                        fragment.appendChild(div);
-                    } else {
-                        // This handles both plain text and inline math ($...$)
-                        // Split by actual newline characters OR @ to support explicit line breaks
-                        const textParts = part.split(/@|\r?\n/);
-                        textParts.forEach((textPart, index) => {
-                            fragment.appendChild(document.createTextNode(textPart));
-                            if (index < textParts.length - 1) {
-                                fragment.appendChild(document.createElement('br'));
-                            }
-                        });
-                    }
+                let processedText = text;
+                if (!hasHtml) {
+                    // Escape legacy plain text to prevent XSS if we are treating it as HTML now
+                    processedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                                        .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
                 }
-                parentElement.appendChild(fragment);
+
+                // Replace @ with <br> (legacy support)
+                processedText = processedText.replace(/@/g, '<br>');
+
+                // Handle MathJax $$...$$ wrapping for newlines
+                processedText = processedText.replace(/(\$\$)([\s\S]*?)(\$\$)/g, (match, p1, p2, p3) => {
+                     // If the math block contains \\ (latex newline), wrap in gathered to ensure it renders correctly
+                     if (p2.includes('\\\\')) {
+                         return p1 + '\\begin{gathered}' + p2 + '\\end{gathered}' + p3;
+                     }
+                     return match;
+                });
+
+                // Set InnerHTML - MathJax will process the math within the HTML
+                parentElement.innerHTML = processedText;
             }
 
-            function isLikelyMath(text) {
-              // It's definitely math if it contains these characters.
-              if (/[\\^{}_]/.test(text)) return true;
-
-              // If it has an equals sign, it's probably math, unless it's a long sentence.
-              if (text.includes('=') && text.trim().split(/\s+/).length < 4) return true;
-
-              // If it has no spaces and contains letters, it's probably a formula like 'x' or 'abc'.
-              if (!text.includes(' ') && /[a-zA-Z]/.test(text)) return true;
-
-              return false;
-            }
-
-            function formatGoalTextForDisplay(text) {
-                // This function now only ensures the text has the correct delimiters.
-                // The actual rendering is handled by renderTextWithMath.
-                if (text.includes('$') || text.includes('\\[')) {
-                    return text; // Trust user's delimiters
-                }
-                if (isLikelyMath(text)) {
-                    return `$$${text}$$`; // Default likely math to centered display math
-                }
-                return text; // Treat as plain text
-            }
+            // (Helper functions isLikelyMath and formatGoalTextForDisplay are no longer strictly needed for HTML mode
+            // but kept if any legacy path uses them, though we bypass them now in renderTextWithMath)
+            function isLikelyMath(text) { return /[\\^{}_]/.test(text); }
+            function formatGoalTextForDisplay(text) { return text; }
 
             // --- Data Migration ---
             async function migrateDataFromLocalStorage() {
@@ -4524,6 +4582,21 @@
             document.body.addEventListener('drop', handleDrop);
 
 
+            // --- Editor Logic ---
+            document.addEventListener('click', (e) => {
+                // Toolbar buttons
+                if (e.target.closest('.custom-formula-editor-btn')) {
+                    e.preventDefault();
+                    const btn = e.target.closest('.custom-formula-editor-btn');
+                    const cmd = btn.dataset.cmd;
+                    document.execCommand(cmd, false, null);
+
+                    // Keep focus in the editor
+                    const editor = btn.parentElement.nextElementSibling;
+                    if(editor) editor.focus();
+                }
+            });
+
             // --- Shortcut Button Logic ---
             function handleShortcutClick(event) {
                 const button = event.target.closest('.custom-formula-shortcut-btn');
@@ -4534,31 +4607,41 @@
 
                 // Determine the active input field by checking which modal is visible
                 if (addSubgoalModal.classList.contains('custom-formula-show')) {
-                    targetInput = subgoalInput;
+                    targetInput = document.getElementById('custom-formula-subgoal-input');
                 } else {
                     // Fallback to the main goal input if no modal is active
-                    targetInput = manualFormulaInput;
+                    targetInput = document.getElementById('custom-formula-manual-formula-input');
                 }
 
                 if (targetInput) {
-                    targetInput.focus(); // Ensure the input is focused before manipulation
-                    const start = targetInput.selectionStart;
-                    const end = targetInput.selectionEnd;
-                    const text = targetInput.value;
-                    const cursorPosition = codeToInsert.indexOf('|');
-                    const finalCode = codeToInsert.replace('|', '');
+                    targetInput.focus();
 
-                    // Insert the code and update the value
-                    targetInput.value = text.substring(0, start) + finalCode + text.substring(end);
+                    const selection = window.getSelection();
+                    if (selection.rangeCount > 0) {
+                        const range = selection.getRangeAt(0);
 
-                    // Set the new cursor position
-                    if (cursorPosition !== -1) {
-                        const newCursorPos = start + cursorPosition;
-                        targetInput.setSelectionRange(newCursorPos, newCursorPos);
+                        // Check if selection is actually inside our target input
+                        if (targetInput.contains(range.commonAncestorContainer)) {
+                             range.deleteContents();
+
+                             const finalCode = codeToInsert.replace('|', '');
+
+                             // Insert text node
+                             const textNode = document.createTextNode(finalCode);
+                             range.insertNode(textNode);
+
+                             // Move cursor to end of inserted text
+                             range.setStartAfter(textNode);
+                             range.setEndAfter(textNode);
+
+                             selection.removeAllRanges();
+                             selection.addRange(range);
+                        } else {
+                            // Focus wasn't in input, append to end
+                            targetInput.innerHTML += codeToInsert.replace('|', '');
+                        }
                     } else {
-                        // If no pipe, place cursor at the end of the inserted code
-                        const newCursorPos = start + finalCode.length;
-                        targetInput.setSelectionRange(newCursorPos, newCursorPos);
+                        targetInput.innerHTML += codeToInsert.replace('|', '');
                     }
                 }
             }
