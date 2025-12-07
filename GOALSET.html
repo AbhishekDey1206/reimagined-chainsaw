@@ -300,6 +300,8 @@
             max-width: 100%;
             cursor: pointer;
             scrollbar-width: none; /* For Firefox */
+            white-space: pre-wrap; /* Ensure text wraps */
+            word-break: break-word; /* Ensure long words break */
         }
         .custom-formula-formula-text::-webkit-scrollbar {
             display: none; /* For Chrome, Safari, and Opera */
@@ -4300,31 +4302,55 @@
 
             function renderTextWithMath(parentElement, text) {
                 // Securely renders text (HTML) and MathJax formulas
-                parentElement.innerHTML = ''; // Clear previous content
+                parentElement.innerHTML = '';
 
-                // Check for HTML content (basic heuristic) to handle legacy plain text
+                // Check for HTML content (basic heuristic)
                 const hasHtml = /<[a-z][\s\S]*>/i.test(text) || text.includes('&lt;') || text.includes('&gt;') || text.includes('&amp;');
 
                 let processedText = text;
                 if (!hasHtml) {
-                    // Escape legacy plain text to prevent XSS if we are treating it as HTML now
+                    // Escape legacy plain text
                     processedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
                                         .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
                 }
 
-                // Replace @ with <br> (legacy support)
-                processedText = processedText.replace(/@/g, '<br>');
+                // Process MathJax blocks first to handle delimiters specifically
+                processedText = processedText.replace(/(\$\$)([\s\S]*?)(\$\$)|(\\\[)([\s\S]*?)(\\\])/g, (match, m1, m2, m3, m4, m5, m6) => {
+                    const delimiter = m1 || m4;
+                    const closing = m3 || m6;
+                    let content = m2 || m5;
 
-                // Handle MathJax $$...$$ wrapping for newlines
-                processedText = processedText.replace(/(\$\$)([\s\S]*?)(\$\$)/g, (match, p1, p2, p3) => {
-                     // If the math block contains \\ (latex newline), wrap in gathered to ensure it renders correctly
-                     if (p2.includes('\\\\')) {
-                         return p1 + '\\begin{gathered}' + p2 + '\\end{gathered}' + p3;
-                     }
-                     return match;
+                    // 1. Convert @ to \\ inside math
+                    content = content.replace(/@/g, '\\\\');
+
+                    // 2. Convert HTML breaks to \\ inside math (if user typed enter inside the formula in rich text)
+                    // This handles <br>, <br/>, <div>, <p>, and closes them properly
+                    content = content.replace(/<br\s*\/?>/gi, '\\\\')
+                                     .replace(/<\/div>/gi, '\\\\')
+                                     .replace(/<\/p>/gi, '\\\\')
+                                     .replace(/<div[^>]*>/gi, '')
+                                     .replace(/<p[^>]*>/gi, '');
+
+                    // 3. Strip other HTML tags inside math (like <b>, <span>) that MathJax doesn't like?
+                    // Generally, we want to keep the content clean. MathJax v3 might handle some text but safer to strip.
+                    // But if user bolds the whole formula, the tags are outside. If inside: $$ <b>x</b> $$ -> \mathbf{x}?
+                    // For now, assume simple stripping of non-break tags to avoid rendering issues
+                    content = content.replace(/<[^>]+>/g, '');
+
+                    // 4. Wrap in gathered if we have newlines
+                    if (content.includes('\\\\') && !content.includes('\\begin')) {
+                        content = '\\begin{gathered}' + content + '\\end{gathered}';
+                    }
+
+                    return delimiter + content + closing;
                 });
 
-                // Set InnerHTML - MathJax will process the math within the HTML
+                // After processing math blocks, handle remaining @ in plain text as <br>
+                // We must be careful not to touch the ones we just processed inside math.
+                // However, since we reconstructed the string with delimiters, regex replace might hit them again if we aren't careful.
+                // Simpler approach: The @ inside math are now \\. So global replace of @ is safe now.
+                processedText = processedText.replace(/@/g, '<br>');
+
                 parentElement.innerHTML = processedText;
             }
 
@@ -4602,7 +4628,7 @@
                 const button = event.target.closest('.custom-formula-shortcut-btn');
                 if (!button) return;
 
-                const codeToInsert = button.dataset.code;
+                const rawCode = button.dataset.code;
                 let targetInput = null;
 
                 // Determine the active input field by checking which modal is visible
@@ -4616,6 +4642,10 @@
                 if (targetInput) {
                     targetInput.focus();
 
+                    // Determine insert text and cursor offset
+                    const cursorOffset = rawCode.indexOf('|');
+                    const codeToInsert = rawCode.replace('|', '');
+
                     const selection = window.getSelection();
                     if (selection.rangeCount > 0) {
                         const range = selection.getRangeAt(0);
@@ -4624,24 +4654,43 @@
                         if (targetInput.contains(range.commonAncestorContainer)) {
                              range.deleteContents();
 
-                             const finalCode = codeToInsert.replace('|', '');
-
                              // Insert text node
-                             const textNode = document.createTextNode(finalCode);
+                             const textNode = document.createTextNode(codeToInsert);
                              range.insertNode(textNode);
 
-                             // Move cursor to end of inserted text
-                             range.setStartAfter(textNode);
-                             range.setEndAfter(textNode);
+                             // Set cursor position
+                             if (cursorOffset !== -1) {
+                                 // Position cursor inside the inserted text node at offset
+                                 range.setStart(textNode, cursorOffset);
+                                 range.setEnd(textNode, cursorOffset);
+                             } else {
+                                 // Position at end
+                                 range.setStartAfter(textNode);
+                                 range.setEndAfter(textNode);
+                             }
 
                              selection.removeAllRanges();
                              selection.addRange(range);
                         } else {
                             // Focus wasn't in input, append to end
-                            targetInput.innerHTML += codeToInsert.replace('|', '');
+                            const textNode = document.createTextNode(codeToInsert);
+                            targetInput.appendChild(textNode);
+
+                            // Move cursor to end/offset
+                            const newRange = document.createRange();
+                            if (cursorOffset !== -1) {
+                                 newRange.setStart(textNode, cursorOffset);
+                                 newRange.setEnd(textNode, cursorOffset);
+                            } else {
+                                 newRange.setStartAfter(textNode);
+                                 newRange.setEndAfter(textNode);
+                            }
+                            selection.removeAllRanges();
+                            selection.addRange(newRange);
                         }
                     } else {
-                        targetInput.innerHTML += codeToInsert.replace('|', '');
+                        // Fallback append
+                        targetInput.innerHTML += codeToInsert;
                     }
                 }
             }
