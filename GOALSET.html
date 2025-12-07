@@ -877,6 +877,13 @@
             margin: 0 !important;
         }
 
+        .math-center mjx-container, .math-left mjx-container {
+            margin: 0 !important;
+        }
+        .math-center, .math-left {
+            margin: 0.5em 0;
+        }
+
         .custom-formula-shortcuts {
             display: flex;
             overflow-x: auto;
@@ -4315,26 +4322,33 @@
                 }
 
                 // Process MathJax blocks first to handle delimiters specifically
-                processedText = processedText.replace(/(\$\$)([\s\S]*?)(\$\$)|(\\\[)([\s\S]*?)(\\\])/g, (match, m1, m2, m3, m4, m5, m6) => {
-                    const delimiter = m1 || m4;
-                    const closing = m3 || m6;
-                    let content = m2 || m5;
+                // Regex consumes surrounding whitespace (\s*) to prevent double spacing/gaps
+                processedText = processedText.replace(/\s*(\$\$[\s\S]*?\$\$)\s*|\s*(\\\[[\s\S]*?\\\])\s*/g, (match, m1, m2) => {
+                    let block = m1 || m2; // The full block including delimiters
+
+                    let delimiter, content, closing;
+
+                    if (block.startsWith('$$')) {
+                        delimiter = '$$';
+                        closing = '$$';
+                        content = block.slice(2, -2);
+                    } else {
+                        delimiter = '\\[';
+                        closing = '\\]';
+                        content = block.slice(2, -2);
+                    }
 
                     // 1. Convert @ to \\ inside math
                     content = content.replace(/@/g, '\\\\');
 
-                    // 2. Convert HTML breaks to \\ inside math (if user typed enter inside the formula in rich text)
-                    // This handles <br>, <br/>, <div>, <p>, and closes them properly
+                    // 2. Convert HTML breaks to \\ inside math
                     content = content.replace(/<br\s*\/?>/gi, '\\\\')
                                      .replace(/<\/div>/gi, '\\\\')
                                      .replace(/<\/p>/gi, '\\\\')
                                      .replace(/<div[^>]*>/gi, '')
                                      .replace(/<p[^>]*>/gi, '');
 
-                    // 3. Strip other HTML tags inside math (like <b>, <span>) that MathJax doesn't like?
-                    // Generally, we want to keep the content clean. MathJax v3 might handle some text but safer to strip.
-                    // But if user bolds the whole formula, the tags are outside. If inside: $$ <b>x</b> $$ -> \mathbf{x}?
-                    // For now, assume simple stripping of non-break tags to avoid rendering issues
+                    // 3. Strip other HTML tags inside math
                     content = content.replace(/<[^>]+>/g, '');
 
                     // 4. Wrap in gathered if we have newlines
@@ -4345,20 +4359,16 @@
                     const result = delimiter + content + closing;
 
                     // Apply alignment wrappers
-                    if (m1 === '$$') {
+                    if (delimiter === '$$') {
                         return '<div class="math-center">' + result + '</div>';
-                    } else if (m4 === '\\[' || m4 === '\\[') {
+                    } else {
                         return '<div class="math-left">' + result + '</div>';
                     }
-
-                    return result;
                 });
 
                 // After processing math blocks, handle remaining @ in plain text as <br>
-                // We must be careful not to touch the ones we just processed inside math.
-                // However, since we reconstructed the string with delimiters, regex replace might hit them again if we aren't careful.
-                // Simpler approach: The @ inside math are now \\. So global replace of @ is safe now.
-                processedText = processedText.replace(/@/g, '<br>');
+                // Consume surrounding whitespace to prevent gaps
+                processedText = processedText.replace(/\s*@\s*/g, '<br>');
 
                 parentElement.innerHTML = processedText;
             }
