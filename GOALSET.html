@@ -1114,14 +1114,9 @@
             <h2>3. Add Goals Manually</h2>
             <div class="custom-formula-shortcuts">
                 <button class="custom-formula-shortcut-btn" data-code="\">\</button>
-                <button class="custom-formula-shortcut-btn" data-code="\[|\]">&lbrack;\]</button>
                 <button class="custom-formula-shortcut-btn" data-code="\text{|}">\text{}</button>
-                <button class="custom-formula-shortcut-btn" data-code="~">~</button>
-                <button class="custom-formula-shortcut-btn" data-code="$$|$$">$$</button>
                 <button class="custom-formula-shortcut-btn" data-code="$|$">$</button>
                 <button class="custom-formula-shortcut-btn" data-code="\frac{|}{}">\frac{}{}</button>
-                <button class="custom-formula-shortcut-btn" data-code="\vec{|}">\vec{}</button>
-                <button class="custom-formula-shortcut-btn" data-code="\quad">\quad</button>
                 <button class="custom-formula-shortcut-btn" data-code="\sqrt{|}">\sqrt{}</button>
                 <button class="custom-formula-shortcut-btn" data-code="\sum">\sum</button>
                 <button class="custom-formula-shortcut-btn" data-code="\int">\int</button>
@@ -1140,7 +1135,7 @@
                     </div>
                     <div id="custom-formula-manual-formula-input" class="custom-formula-editor-content" contenteditable="true" placeholder="e.g., f(x) = x^2"></div>
                 </div>
-                <p><small>Tip: Separate multiple goals with <b>/newgoal</b> or an emoji (e.g., 🚀)</small></p>
+                <p><small>Tip: Separate multiple goals with <b>/newgoal</b></small></p>
             </div>
             <button id="custom-formula-add-formula-btn" class="custom-formula-btn">Add Goals</button>
         </div>
@@ -1285,14 +1280,9 @@
             <h2 id="custom-formula-add-subgoal-title">Add Subgoal</h2>
             <div class="custom-formula-shortcuts">
                 <button class="custom-formula-shortcut-btn" data-code="\">\</button>
-                <button class="custom-formula-shortcut-btn" data-code="\[|\]">&lbrack;\]</button>
                 <button class="custom-formula-shortcut-btn" data-code="\text{|}">\text{}</button>
-                <button class="custom-formula-shortcut-btn" data-code="~">~</button>
-                <button class="custom-formula-shortcut-btn" data-code="$$|$$">$$</button>
                 <button class="custom-formula-shortcut-btn" data-code="$|$">$</button>
                 <button class="custom-formula-shortcut-btn" data-code="\frac{|}{}">\frac{}{}</button>
-                <button class="custom-formula-shortcut-btn" data-code="\vec{|}">\vec{}</button>
-                <button class="custom-formula-shortcut-btn" data-code="\quad">\quad</button>
                 <button class="custom-formula-shortcut-btn" data-code="\sqrt{|}">\sqrt{}</button>
                 <button class="custom-formula-shortcut-btn" data-code="\sum">\sum</button>
                 <button class="custom-formula-shortcut-btn" data-code="\int">\int</button>
@@ -3348,7 +3338,7 @@
 
                 formulas.push(...uniqueNewFormulas);
                 parsedFormulas = [];
-                manualFormulaInput.value = ''; // Also clear manual input in case it was used
+                manualFormulaInput.innerHTML = ''; // Also clear manual input in case it was used
 
                 saveFormulasToLocalStorage();
                 renderFormulas();
@@ -4082,24 +4072,20 @@
                     return;
                 }
 
-                // Split by /newgoal (case insensitive) first
+                // Split by /newgoal (case insensitive) only
                 const rawChunks = htmlContent.split(/\/newgoal/i);
                 let finalGoals = [];
 
                 rawChunks.forEach(chunk => {
-                    // Then fallback to emoji split
-                    const subParts = chunk.split(/\p{Emoji_Presentation}/u);
-                    subParts.forEach(s => {
-                        const trimmed = s.trim();
-                        // Check if it has actual content (strip HTML tags to check)
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = trimmed;
-                        const hasContent = tempDiv.textContent.trim().length > 0 || tempDiv.querySelectorAll('img, table, hr').length > 0;
+                    const trimmed = chunk.trim();
+                    // Check if it has actual content (strip HTML tags to check)
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = trimmed;
+                    const hasContent = tempDiv.textContent.trim().length > 0 || tempDiv.querySelectorAll('img, table, hr').length > 0;
 
-                        if (hasContent) {
-                            finalGoals.push(trimmed);
-                        }
-                    });
+                    if (hasContent) {
+                        finalGoals.push(trimmed);
+                    }
                 });
 
                 if (finalGoals.length === 0) {
